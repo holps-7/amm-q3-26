@@ -49,6 +49,22 @@ pub struct Swap<'info> {
         associated_token::authority = user,
     )]
     pub user_y: Box<Account<'info, TokenAccount>>,
+    #[account(
+        mut,
+        seeds = [b"treasury_x", config.key().as_ref()],
+        bump,
+        token::mint = mint_x,
+        token::authority = config,
+    )]
+    pub treasury_x: Box<Account<'info, TokenAccount>>,
+    #[account(
+        mut,
+        seeds = [b"treasury_y", config.key().as_ref()],
+        bump,
+        token::mint = mint_y,
+        token::authority = config,
+    )]
+    pub treasury_y: Box<Account<'info, TokenAccount>>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -65,6 +81,18 @@ impl<'info> Swap<'info> {
         require!(!self.config.locked, AmmError::PoolLocked);
         require_neq!(amount_in, 0, AmmError::InvalidAmount);
 
+        // protocol fee is skimmed off the input before it reaches the curve
+        let protocol_fee = (amount_in as u128)
+            .checked_mul(self.config.protocol_fee as u128)
+            .ok_or(AmmError::Overflow)?
+            .checked_div(10_000)
+            .ok_or(AmmError::Overflow)? as u64;
+
+        let curve_amount_in = amount_in
+            .checked_sub(protocol_fee)
+            .ok_or(AmmError::Underflow)?;
+        require_neq!(curve_amount_in, 0, AmmError::InvalidAmount);
+
         let mut constant_product_curve = ConstantProduct::init(
             self.vault_x.amount,
             self.vault_y.amount,
@@ -78,12 +106,12 @@ impl<'info> Swap<'info> {
             false => LiquidityPair::Y,
         };
 
-        let swap_result = constant_product_curve.swap(
-            liquidity_pair, amount_in, min_amount_out
-        )
-        .map_err(|_| AmmError::SlippageExceeded)?;
+        let swap_result = constant_product_curve
+            .swap(liquidity_pair, curve_amount_in, min_amount_out)
+            .map_err(|_| AmmError::SlippageExceeded)?;
 
         self.deposit_tokens(is_x, swap_result.deposit)?;
+        self.collect_protocol_fee(is_x, protocol_fee)?;
         self.withdraw_tokens(is_x, swap_result.withdraw)
     }
 
@@ -96,6 +124,35 @@ impl<'info> Swap<'info> {
             false => (
                 self.user_y.to_account_info(),
                 self.vault_y.to_account_info(),
+            ),
+        };
+
+        let cpi_program = self.token_program.key();
+
+        let cpi_accounts = Transfer {
+            from,
+            to,
+            authority: self.user.to_account_info(),
+        };
+
+        let ctx = CpiContext::new(cpi_program, cpi_accounts);
+
+        transfer(ctx, amount)
+    }
+
+    pub fn collect_protocol_fee(&self, is_x: bool, amount: u64) -> Result<()> {
+        if amount == 0 {
+            return Ok(());
+        }
+
+        let (from, to) = match is_x {
+            true => (
+                self.user_x.to_account_info(),
+                self.treasury_x.to_account_info(),
+            ),
+            false => (
+                self.user_y.to_account_info(),
+                self.treasury_y.to_account_info(),
             ),
         };
 

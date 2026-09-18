@@ -19,9 +19,10 @@ pub mod amm_video {
         ctx: Context<Initialize>,
         seed: u64,
         fee: u16,
+        protocol_fee: u16,
         authority: Option<Pubkey>,
     ) -> Result<()> {
-        ctx.accounts.init(seed, fee, authority, ctx.bumps)
+        ctx.accounts.init(seed, fee, protocol_fee, authority, ctx.bumps)
     }
 
     pub fn deposit(ctx: Context<Deposit>, amount: u64, max_x: u64, max_y: u64) -> Result<()> {
@@ -34,5 +35,13 @@ pub mod amm_video {
 
     pub fn swap(ctx: Context<Swap>, is_x: bool, amount_in: u64, min_amount_out: u64) -> Result<()> {
         ctx.accounts.swap(amount_in, min_amount_out, is_x)
+    }
+
+    pub fn lock(ctx: Context<Lock>) -> Result<()> {
+        ctx.accounts.lock()
+    }
+
+    pub fn unlock(ctx: Context<Lock>) -> Result<()> {
+        ctx.accounts.unlock()
     }
 }
