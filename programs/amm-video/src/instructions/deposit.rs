@@ -81,7 +81,7 @@ impl<'info> Deposit<'info> {
                     self.vault_y.amount,
                     self.mint_lp.supply,
                     amount,
-                    6,
+                    1_000_000,
                 )
                 .unwrap();
 
