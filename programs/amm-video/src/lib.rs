@@ -9,7 +9,7 @@ pub use constants::*;
 pub use instructions::*;
 pub use state::*;
 
-declare_id!("6KoUjko5kqLHaF31gdWGBihf8Pw8dUNte2hBpBEJveVe");
+declare_id!("FuUSR4aaifTyejvPqhPYjmRHE54bL3AWbqFEGbmvGqBk");
 
 #[program]
 pub mod amm_video {
@@ -33,6 +33,6 @@ pub mod amm_video {
     }
 
     pub fn swap(ctx: Context<Swap>, is_x: bool, amount_in: u64, min_amount_out: u64) -> Result<()> {
-        ctx.accounts.swap(is_x, amount_in, min_amount_out)
+        ctx.accounts.swap(amount_in, min_amount_out, is_x)
     }
 }
